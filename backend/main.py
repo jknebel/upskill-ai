@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import uuid
 import logging
 
-from backend.config import GEMINI_API_KEY, MODEL_NAME
+from backend.config import GEMINI_API_KEY, MODEL_CHATBOT
 from backend.agents.extractor import PromptExtractor
 from backend.agents.generator import generate_learning_assets
 from backend.utils.clustering import find_learning_needs
@@ -61,7 +61,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     if GEMINI_API_KEY:
         try:
             import google.generativeai as genai
-            model = genai.GenerativeModel(MODEL_NAME)
+            model = genai.GenerativeModel(MODEL_CHATBOT)
             # Récupérer l'historique récent pour donner du contexte au modèle
             history = storage.get_chat_history(user_id)[-10:]
             chat_history_gemini = []

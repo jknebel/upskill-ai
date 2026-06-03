@@ -2,7 +2,7 @@ import json
 import logging
 from pydantic import BaseModel, Field
 from typing import List, Optional
-from backend.config import GEMINI_API_KEY, MODEL_NAME, USE_VERTEX_AI
+from backend.config import GEMINI_API_KEY, MODEL_EXTRACTOR, MODEL_EMBEDDING, USE_VERTEX_AI
 from backend.utils.llm import get_generative_model
 
 # Setup logging
@@ -79,7 +79,7 @@ class PromptExtractor:
             "lacune ('is_learning_gap': true)."
         )
         
-        model = get_generative_model(model_name=MODEL_NAME, system_instruction=system_instruction)
+        model = get_generative_model(model_name=MODEL_EXTRACTOR, system_instruction=system_instruction)
         if not model:
             return self._simulate_extraction(prompt)
             
@@ -148,7 +148,7 @@ class PromptExtractor:
                 genai.configure(api_key=GEMINI_API_KEY)
                 
                 result = genai.embed_content(
-                    model="models/gemini-embedding-2",
+                    model=f"models/{MODEL_EMBEDDING}",
                     content=text,
                     task_type="clustering"
                 )

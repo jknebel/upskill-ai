@@ -6,18 +6,26 @@ load_dotenv()
 
 # Configuration Gemini API (Google AI Studio)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash") # gemini-2.5-flash est le plus récent et le plus rapide
 
 # Configuration Vertex AI (GCP)
 VERTEX_PROJECT_ID = os.getenv("VERTEX_PROJECT_ID", "")
-VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "us-central1") # e.g. us-central1
-
-# Paramètre pour utiliser Vertex AI à la place de l'API Gemini standard
+VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "us-central1")
 USE_VERTEX_AI = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
 
-# Configuration du mode Thinking/Réflexion
-ENABLE_THINKING = os.getenv("ENABLE_THINKING", "false").lower() == "true"
-THINKING_MODEL = os.getenv("THINKING_MODEL", "gemini-2.0-flash-thinking-exp")
+# --- Modèles dédiés par agent ---
+MODEL_CHATBOT = os.getenv("MODEL_CHATBOT", "gemini-2.0-flash-lite")       # Chatbot conversationnel (rapide, pas de thinking)
+MODEL_EXTRACTOR = os.getenv("MODEL_EXTRACTOR", "gemini-2.5-flash")        # Extracteur de lacunes (thinking activé)
+MODEL_TEACHER = os.getenv("MODEL_TEACHER", "gemini-2.5-flash")            # Prof A & Prof B (thinking activé)
+MODEL_DIRECTOR = os.getenv("MODEL_DIRECTOR", "gemini-2.5-pro")            # Directeur vérificateur (thinking activé)
+MODEL_PODCAST = os.getenv("MODEL_PODCAST", "gemini-2.5-pro")              # Générateur de podcast (pas de thinking)
+MODEL_EMBEDDING = os.getenv("MODEL_EMBEDDING", "gemini-embedding-2")      # Embeddings vectoriels
+
+# --- Thinking budgets par agent (-1 = dynamique, 0 = désactivé) ---
+THINKING_CHATBOT = int(os.getenv("THINKING_CHATBOT", "0"))
+THINKING_EXTRACTOR = int(os.getenv("THINKING_EXTRACTOR", "-1"))
+THINKING_TEACHER = int(os.getenv("THINKING_TEACHER", "-1"))
+THINKING_DIRECTOR = int(os.getenv("THINKING_DIRECTOR", "-1"))
+THINKING_PODCAST = int(os.getenv("THINKING_PODCAST", "0"))
 
 
 

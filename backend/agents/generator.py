@@ -5,53 +5,134 @@ from typing import TypedDict, List, Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, START, END
-from backend.config import GEMINI_API_KEY, MODEL_NAME
+from backend.config import (
+    GEMINI_API_KEY,
+    MODEL_TEACHER,
+    MODEL_DIRECTOR,
+    MODEL_PODCAST,
+    THINKING_TEACHER,
+    THINKING_DIRECTOR,
+    THINKING_PODCAST,
+)
 
 from backend.utils.llm import get_langchain_llm
 
 logger = logging.getLogger(__name__)
 
-# Définition de l'état du Graph LangGraph
+# Définition de l'état du Graph LangGraph (étendu pour le pattern 2 Profs + 1 Directeur)
 class AgentState(TypedDict):
     topic: str
     description: str
+    # Sorties du Prof A (pédagogie structurée)
+    course_teacher_a: str
+    quiz_teacher_a: List[Dict[str, Any]]
+    # Sorties du Prof B (exemples pratiques)
+    course_teacher_b: str
+    quiz_teacher_b: List[Dict[str, Any]]
+    # Sorties finales du Directeur
     course_content: str
     quiz: List[Dict[str, Any]]
     podcast_script: List[Dict[str, str]]
 
-# --- NOEUD 1 : Génération du Cours ---
-def generate_course_node(state: AgentState) -> Dict[str, Any]:
+
+# ============================================================================
+# NOEUD 1A : Prof A — Pédagogie structurée et théorique
+# ============================================================================
+def generate_course_teacher_a(state: AgentState) -> Dict[str, Any]:
     topic = state["topic"]
     description = state["description"]
-    
-    llm = get_langchain_llm(temperature=0.7)
-    if not llm:
-        logger.info("Simulation de génération de cours.")
-        return {"course_content": get_mock_course(topic)}
 
-        
-    prompt = ChatPromptTemplate.from_template(
-        "Tu es un enseignant expert. Crée un cours condensé, structuré et très clair en Markdown "
+    llm = get_langchain_llm(
+        model_name=MODEL_TEACHER,
+        thinking_budget=THINKING_TEACHER,
+        temperature=0.7
+    )
+    if not llm:
+        logger.info("Simulation Prof A (pas de LLM).")
+        return {
+            "course_teacher_a": get_mock_course(topic),
+            "quiz_teacher_a": get_mock_quiz(topic)
+        }
+
+    # Prompt orienté pédagogie structurée
+    course_prompt = ChatPromptTemplate.from_template(
+        "Tu es un professeur universitaire expert en pédagogie structurée. "
+        "Crée un cours condensé, très structuré et académique en Markdown "
         "sur le sujet suivant : '{topic}'.\n"
         "Le cours doit s'adresser à quelqu'un qui a la lacune suivante : '{description}'.\n"
-        "Rends le cours interactif avec des exemples de code si nécessaire, et divise-le en 3 sections principales. "
-        "Le cours doit pouvoir se lire en 5 minutes environ pour notre POC."
+        "Organise le cours de façon très hiérarchique avec :\n"
+        "- Des définitions précises et formelles\n"
+        "- Des concepts théoriques bien expliqués\n"
+        "- Des règles et bonnes pratiques\n"
+        "- Un exemple de code commenté si pertinent\n"
+        "Divise le cours en 3 sections principales. "
+        "Le cours doit pouvoir se lire en 5 minutes environ."
     )
-    
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic, "description": description})
-    return {"course_content": response.content}
 
-# --- NOEUD 2 : Génération du Quiz ---
-def generate_quiz_node(state: AgentState) -> Dict[str, Any]:
+    chain = course_prompt | llm
+    course_response = chain.invoke({"topic": topic, "description": description})
+    course_content = course_response.content
+
+    # Générer le quiz du Prof A
+    quiz = _generate_quiz_from_course(llm, course_content, topic)
+
+    return {
+        "course_teacher_a": course_content,
+        "quiz_teacher_a": quiz
+    }
+
+
+# ============================================================================
+# NOEUD 1B : Prof B — Exemples pratiques et cas concrets
+# ============================================================================
+def generate_course_teacher_b(state: AgentState) -> Dict[str, Any]:
     topic = state["topic"]
-    course_content = state["course_content"]
-    
-    llm = get_langchain_llm(temperature=0.3)
+    description = state["description"]
+
+    llm = get_langchain_llm(
+        model_name=MODEL_TEACHER,
+        thinking_budget=THINKING_TEACHER,
+        temperature=0.8  # Légèrement plus créatif
+    )
     if not llm:
-        logger.info("Simulation de génération de quiz.")
-        return {"quiz": get_mock_quiz(topic)}
-        
+        logger.info("Simulation Prof B (pas de LLM).")
+        return {
+            "course_teacher_b": get_mock_course(topic),
+            "quiz_teacher_b": get_mock_quiz(topic)
+        }
+
+    # Prompt orienté exemples pratiques
+    course_prompt = ChatPromptTemplate.from_template(
+        "Tu es un formateur technique pragmatique spécialisé dans l'apprentissage par l'exemple. "
+        "Crée un cours condensé, très pratique et orienté cas concrets en Markdown "
+        "sur le sujet suivant : '{topic}'.\n"
+        "Le cours doit s'adresser à quelqu'un qui a la lacune suivante : '{description}'.\n"
+        "Privilégie :\n"
+        "- Des exemples de code réels et fonctionnels\n"
+        "- Des cas d'usage courants et des erreurs fréquentes\n"
+        "- Des analogies simples pour expliquer les concepts\n"
+        "- Des astuces et raccourcis pratiques\n"
+        "Divise le cours en 3 sections principales. "
+        "Le cours doit pouvoir se lire en 5 minutes environ."
+    )
+
+    chain = course_prompt | llm
+    course_response = chain.invoke({"topic": topic, "description": description})
+    course_content = course_response.content
+
+    # Générer le quiz du Prof B
+    quiz = _generate_quiz_from_course(llm, course_content, topic)
+
+    return {
+        "course_teacher_b": course_content,
+        "quiz_teacher_b": quiz
+    }
+
+
+# ============================================================================
+# Utilitaire partagé : Génération de quiz à partir d'un cours
+# ============================================================================
+def _generate_quiz_from_course(llm, course_content: str, topic: str) -> List[Dict[str, Any]]:
     prompt = ChatPromptTemplate.from_template(
         "En te basant sur le cours suivant :\n\n{course_content}\n\n"
         "Génère un quiz de 3 questions à choix multiples (QCM) au format JSON.\n"
@@ -65,32 +146,137 @@ def generate_quiz_node(state: AgentState) -> Dict[str, Any]:
         "]\n"
         "Ne retourne RIEN d'autre que le JSON brut (pas de balises ```json ou markdown)."
     )
-    
+
     chain = prompt | llm
     response = chain.invoke({"course_content": course_content})
     try:
-        # Nettoyage des balises JSON si présentes malgré la consigne
         text = response.content.strip()
         if text.startswith("```json"):
             text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
         if text.endswith("```"):
             text = text[:-3]
-        quiz_data = json.loads(text.strip())
-        return {"quiz": quiz_data}
+        return json.loads(text.strip())
     except Exception as e:
         logger.error(f"Erreur de parsing du quiz JSON : {e}. Utilisation du fallback.")
-        return {"quiz": get_mock_quiz(topic)}
+        return get_mock_quiz(topic)
 
-# --- NOEUD 3 : Génération du Podcast ---
+
+# ============================================================================
+# NOEUD 2 : Directeur — Fusion et vérification anti-hallucination
+# ============================================================================
+def director_merge_node(state: AgentState) -> Dict[str, Any]:
+    course_a = state["course_teacher_a"]
+    quiz_a = state["quiz_teacher_a"]
+    course_b = state["course_teacher_b"]
+    quiz_b = state["quiz_teacher_b"]
+    topic = state["topic"]
+
+    llm = get_langchain_llm(
+        model_name=MODEL_DIRECTOR,
+        thinking_budget=THINKING_DIRECTOR,
+        temperature=0.3  # Faible température pour la vérification factuelle
+    )
+    if not llm:
+        logger.info("Simulation Directeur — utilisation du cours Prof A par défaut.")
+        return {
+            "course_content": course_a,
+            "quiz": quiz_a
+        }
+
+    # Prompt du Directeur-Vérificateur
+    prompt = ChatPromptTemplate.from_template(
+        "Tu es un directeur pédagogique expert et rigoureux. Tu reçois deux versions d'un cours "
+        "et deux quiz créés par deux professeurs différents sur le sujet : '{topic}'.\n\n"
+        "--- COURS DU PROFESSEUR A (structuré et théorique) ---\n{course_a}\n\n"
+        "--- COURS DU PROFESSEUR B (pratique et exemples concrets) ---\n{course_b}\n\n"
+        "--- QUIZ DU PROFESSEUR A ---\n{quiz_a_json}\n\n"
+        "--- QUIZ DU PROFESSEUR B ---\n{quiz_b_json}\n\n"
+        "Ta mission est de produire UN SEUL cours final optimal en Markdown :\n"
+        "1. Compare les deux cours et identifie les contradictions ou erreurs factuelles\n"
+        "2. Fusionne les meilleures parties : la structure théorique du Prof A avec les exemples pratiques du Prof B\n"
+        "3. Si un fait ou une information n'apparaît que dans un seul cours, vérifie-le soigneusement et retire-le si douteux\n"
+        "4. Le cours final doit être structuré en 3 sections principales, clair et vérifiable\n"
+        "5. Le cours doit pouvoir se lire en 5 minutes environ\n\n"
+        "Retourne UNIQUEMENT le cours final en Markdown, sans commentaire sur ta démarche."
+    )
+
+    chain = prompt | llm
+    try:
+        response = chain.invoke({
+            "topic": topic,
+            "course_a": course_a,
+            "course_b": course_b,
+            "quiz_a_json": json.dumps(quiz_a, ensure_ascii=False, indent=2),
+            "quiz_b_json": json.dumps(quiz_b, ensure_ascii=False, indent=2),
+        })
+        merged_course = response.content
+    except Exception as e:
+        logger.error(f"Erreur Directeur (cours) : {e}. Fallback sur le cours Prof A.")
+        merged_course = course_a
+
+    # Générer le quiz final à partir du cours fusionné
+    quiz_llm = get_langchain_llm(
+        model_name=MODEL_DIRECTOR,
+        thinking_budget=THINKING_DIRECTOR,
+        temperature=0.2
+    )
+    if quiz_llm:
+        quiz_prompt = ChatPromptTemplate.from_template(
+            "Tu es un directeur pédagogique. Voici le cours final vérifié :\n\n{course_content}\n\n"
+            "Voici les quiz proposés par deux professeurs :\n"
+            "--- Quiz Prof A ---\n{quiz_a_json}\n"
+            "--- Quiz Prof B ---\n{quiz_b_json}\n\n"
+            "Crée un quiz final de 3 questions QCM en sélectionnant et améliorant les meilleures questions. "
+            "Assure-toi que chaque réponse est factuelle et cohérente avec le cours final.\n"
+            "Retourne UNIQUEMENT le JSON brut au format :\n"
+            "[{{\"question\": \"...\", \"options\": [\"A\", \"B\", \"C\", \"D\"], \"answer\": \"...\"}}]\n"
+            "Pas de balises ```json ou markdown."
+        )
+        quiz_chain = quiz_prompt | quiz_llm
+        try:
+            quiz_response = quiz_chain.invoke({
+                "course_content": merged_course,
+                "quiz_a_json": json.dumps(quiz_a, ensure_ascii=False, indent=2),
+                "quiz_b_json": json.dumps(quiz_b, ensure_ascii=False, indent=2),
+            })
+            text = quiz_response.content.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.startswith("```"):
+                text = text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            merged_quiz = json.loads(text.strip())
+        except Exception as e:
+            logger.error(f"Erreur Directeur (quiz) : {e}. Utilisation du quiz Prof A.")
+            merged_quiz = quiz_a
+    else:
+        merged_quiz = quiz_a
+
+    return {
+        "course_content": merged_course,
+        "quiz": merged_quiz
+    }
+
+
+# ============================================================================
+# NOEUD 3 : Génération du Podcast (à partir du cours vérifié par le Directeur)
+# ============================================================================
 def generate_podcast_node(state: AgentState) -> Dict[str, Any]:
     topic = state["topic"]
     course_content = state["course_content"]
-    
-    llm = get_langchain_llm(temperature=0.7)
+
+    llm = get_langchain_llm(
+        model_name=MODEL_PODCAST,
+        thinking_budget=THINKING_PODCAST,
+        temperature=0.7
+    )
     if not llm:
         logger.info("Simulation de génération de podcast.")
         return {"podcast_script": get_mock_podcast(topic)}
-        
+
     prompt = ChatPromptTemplate.from_template(
         "Tu es un scénariste de podcast de vulgarisation scientifique et technique.\n"
         "En te basant sur le cours suivant : \n\n{course_content}\n\n"
@@ -110,13 +296,15 @@ def generate_podcast_node(state: AgentState) -> Dict[str, Any]:
         "Génère environ 6 à 10 répliques au total pour ce court podcast de démonstration.\n"
         "Ne retourne RIEN d'autre que le JSON brut (pas de balises ```json ou markdown)."
     )
-    
+
     chain = prompt | llm
     response = chain.invoke({"course_content": course_content})
     try:
         text = response.content.strip()
         if text.startswith("```json"):
             text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
         if text.endswith("```"):
             text = text[:-3]
         script_data = json.loads(text.strip())
@@ -125,22 +313,37 @@ def generate_podcast_node(state: AgentState) -> Dict[str, Any]:
         logger.error(f"Erreur de parsing du script de podcast : {e}. Utilisation du fallback.")
         return {"podcast_script": get_mock_podcast(topic)}
 
-# --- CONSTRUCTION DU GRAPHE LANGGRAPH ---
+
+# ============================================================================
+# CONSTRUCTION DU GRAPHE LANGGRAPH — Pattern 2 Profs + 1 Directeur
+# ============================================================================
 def build_generation_graph():
+    """
+    Graphe LangGraph :
+    
+        START ──┬──> Prof A (gemini-2.5-flash + thinking) ──┐
+                │                                            ├──> Directeur (gemini-2.5-pro + thinking) ──> Podcast (gemini-2.5-pro) ──> END
+                └──> Prof B (gemini-2.5-flash + thinking) ──┘
+    
+    Prof A et Prof B s'exécutent en parallèle.
+    Le Directeur fusionne et vérifie les deux cours avant de passer au podcast.
+    """
     workflow = StateGraph(AgentState)
-    
+
     # Ajouter les nœuds
-    workflow.add_node("generate_course", generate_course_node)
-    workflow.add_node("generate_quiz", generate_quiz_node)
-    workflow.add_node("generate_podcast", generate_podcast_node)
-    
-    # Relier les nœuds
-    workflow.add_edge(START, "generate_course")
-    workflow.add_edge("generate_course", "generate_quiz")
-    workflow.add_edge("generate_course", "generate_podcast")
-    workflow.add_edge("generate_quiz", END)
-    workflow.add_edge("generate_podcast", END)
-    
+    workflow.add_node("teacher_a", generate_course_teacher_a)
+    workflow.add_node("teacher_b", generate_course_teacher_b)
+    workflow.add_node("director", director_merge_node)
+    workflow.add_node("podcast", generate_podcast_node)
+
+    # Relier les nœuds : START → [Prof A || Prof B] → Directeur → Podcast → END
+    workflow.add_edge(START, "teacher_a")
+    workflow.add_edge(START, "teacher_b")
+    workflow.add_edge("teacher_a", "director")
+    workflow.add_edge("teacher_b", "director")
+    workflow.add_edge("director", "podcast")
+    workflow.add_edge("podcast", END)
+
     return workflow.compile()
 
 # --- INSTANCE DU GRAPH COMPILÉ ---
@@ -149,15 +352,20 @@ generator_agent = build_generation_graph()
 def generate_learning_assets(topic: str, description: str) -> Dict[str, Any]:
     """
     Fonction principale à appeler pour lancer la génération de cours, quiz et podcast.
+    Utilise le pattern 2 Professeurs + 1 Directeur pour réduire les hallucinations.
     """
     initial_state = {
         "topic": topic,
         "description": description,
+        "course_teacher_a": "",
+        "quiz_teacher_a": [],
+        "course_teacher_b": "",
+        "quiz_teacher_b": [],
         "course_content": "",
         "quiz": [],
         "podcast_script": []
     }
-    
+
     result = generator_agent.invoke(initial_state)
     return {
         "course_content": result["course_content"],
@@ -165,7 +373,9 @@ def generate_learning_assets(topic: str, description: str) -> Dict[str, Any]:
         "podcast_script": result["podcast_script"]
     }
 
-# --- CONTENU SIMULÉ DE FALLBACK (POUR DÉMO INSTANTANÉE EN LOCAL) ---
+# ============================================================================
+# CONTENU SIMULÉ DE FALLBACK (POUR DÉMO INSTANTANÉE EN LOCAL)
+# ============================================================================
 
 def get_mock_course(topic: str) -> str:
     if "pandas" in topic.lower():
