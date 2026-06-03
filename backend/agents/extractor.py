@@ -19,11 +19,34 @@ class KnowledgeGap(BaseModel):
 class ExtractorResponse(BaseModel):
     detected_gaps: List[KnowledgeGap] = Field(description="Liste des lacunes détectées dans le prompt.")
 
+def inline_refs(schema: dict) -> dict:
+    """
+    Résout et remplace récursivement les références '$ref' par les définitions réelles dans '$defs'.
+    Indispensable car les API Gemini et Vertex AI n'acceptent pas les schémas avec des définitions séparées ($defs).
+    """
+    if not isinstance(schema, dict):
+        return schema
+        
+    defs = schema.get("$defs", schema.get("definitions", {}))
+    
+    def resolve(node):
+        if isinstance(node, dict):
+            if "$ref" in node:
+                ref_path = node["$ref"]
+                def_name = ref_path.split("/")[-1]
+                if def_name in defs:
+                    return resolve(defs[def_name])
+            return {k: resolve(v) for k, v in node.items() if k not in ("$defs", "definitions")}
+        elif isinstance(node, list):
+            return [resolve(item) for item in node]
+        return node
+        
+    return resolve(schema)
+
 def clean_schema(schema: dict) -> dict:
     """
-    Nettoie récursivement un schéma JSON généré par Pydantic pour supprimer
-    les clés comme 'default' et 'title' qui provoquent des erreurs de validation
-    avec les API Gemini et Vertex AI.
+    Supprime récursivement les attributs incompatibles comme 'default' ou 'title'
+    qui bloquent la validation du schéma sur Gemini.
     """
     if not isinstance(schema, dict):
         return schema
@@ -56,15 +79,19 @@ class PromptExtractor:
             "lacune ('is_learning_gap': true)."
         )
         
-        model = get_generative_model(system_instruction=system_instruction)
+        model = get_generative_model(model_name=MODEL_NAME, system_instruction=system_instruction)
         if not model:
-            # Mode Simulation si aucune clé ou config dispo
             return self._simulate_extraction(prompt)
             
         try:
-            # Générer et nettoyer le schéma JSON de réponse pour l'API Gemini
+            # 1. Générer le schéma JSON brut de Pydantic
             raw_schema = ExtractorResponse.model_json_schema()
-            cleaned_schema = clean_schema(raw_schema)
+            
+            # 2. Aplatir le schéma en résolvant les définitions imbriquées ($defs)
+            flat_schema = inline_refs(raw_schema)
+            
+            # 3. Nettoyer les attributs interdits (title, default)
+            cleaned_schema = clean_schema(flat_schema)
 
             config = {
                 "response_mime_type": "application/json",
@@ -72,9 +99,7 @@ class PromptExtractor:
                 "temperature": 0.1
             }
             
-            # Gestion de la différence légère d'appel dans Vertex vs GenAI
             if USE_VERTEX_AI:
-                # Vertex AI SDK
                 from vertexai.generative_models import GenerationConfig
                 generation_config = GenerationConfig(**config)
                 response = model.generate_content(
@@ -82,7 +107,6 @@ class PromptExtractor:
                     generation_config=generation_config
                 )
             else:
-                # Google AI Studio SDK
                 import google.generativeai as genai
                 generation_config = genai.GenerationConfig(**config)
                 response = model.generate_content(
@@ -91,13 +115,11 @@ class PromptExtractor:
                 )
             
             data = json.loads(response.text)
-            # Ne conserver que les vraies lacunes d'apprentissage avec une confiance minimale
             gaps = [
                 gap for gap in data.get("detected_gaps", [])
                 if gap.get("is_learning_gap") and gap.get("confidence", 0) > 0.5
             ]
             
-            # Ajouter un embedding pour chaque lacune
             for gap in gaps:
                 gap["embedding"] = self.generate_embedding(gap["topic"])
                 
@@ -111,7 +133,6 @@ class PromptExtractor:
         """
         Génère un embedding vectoriel pour le texte spécifié.
         """
-        # 1. Utilisation de Vertex AI si actif
         if USE_VERTEX_AI:
             try:
                 from vertexai.language_models import TextEmbeddingModel
@@ -121,22 +142,30 @@ class PromptExtractor:
             except Exception as e:
                 logger.error(f"Erreur d'embedding Vertex AI : {e}")
                 
-        # 2. Utilisation de Google AI Studio
         if GEMINI_API_KEY:
             try:
                 import google.generativeai as genai
                 genai.configure(api_key=GEMINI_API_KEY)
-                # Utiliser models/embedding-001 qui est universellement supporté et très stable
+                
                 result = genai.embed_content(
-                    model="models/embedding-001",
+                    model="models/gemini-embedding-2",
                     content=text,
                     task_type="clustering"
                 )
                 return result['embedding']
             except Exception as e:
-                logger.error(f"Erreur d'embedding Google AI Studio : {e}")
+                logger.error(f"Erreur d'embedding Google AI Studio (gemini-embedding-2) : {e}")
+                # Fallback de secours sur le modèle gemini-embedding-001 si gemini-embedding-2 échoue
+                try:
+                    result = genai.embed_content(
+                        model="models/gemini-embedding-001",
+                        content=text,
+                        task_type="clustering"
+                    )
+                    return result['embedding']
+                except Exception as e2:
+                    logger.error(f"Erreur d'embedding Google AI Studio (gemini-embedding-001) : {e2}")
                 
-        # Fallback simulation
         import random
         random.seed(text)
         return [random.uniform(-1, 1) for _ in range(16)]
@@ -148,7 +177,6 @@ class PromptExtractor:
         prompt_lower = prompt.lower()
         gaps = []
         
-        # Démo : Pandas
         if "pandas" in prompt_lower or "dataframe" in prompt_lower or "merge" in prompt_lower or "join" in prompt_lower:
             gaps.append({
                 "topic": "Pandas DataFrames",
@@ -156,7 +184,6 @@ class PromptExtractor:
                 "confidence": 0.95,
                 "is_learning_gap": True
             })
-        # Démo : Docker
         elif "docker" in prompt_lower or "volume" in prompt_lower or "container" in prompt_lower:
             gaps.append({
                 "topic": "Docker Containers",
@@ -164,7 +191,6 @@ class PromptExtractor:
                 "confidence": 0.90,
                 "is_learning_gap": True
             })
-        # Démo : Upskill AI
         elif "upskill" in prompt_lower or "poc" in prompt_lower or "agent" in prompt_lower:
             gaps.append({
                 "topic": "Upskill AI & Agentic",
