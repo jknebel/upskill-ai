@@ -19,7 +19,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const USER_ID = 'demo_user_123'; // ID pseudonymisé pour le POC
 
 export default function App() {
