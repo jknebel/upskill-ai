@@ -16,8 +16,9 @@ VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "us-central1") # e.g. us-central1
 USE_VERTEX_AI = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
 
 # Configuration du mode Thinking/Réflexion
-ENABLE_THINKING = os.getenv("ENABLE_THINKING", "true").lower() == "true"
+ENABLE_THINKING = os.getenv("ENABLE_THINKING", "false").lower() == "true"
 THINKING_MODEL = os.getenv("THINKING_MODEL", "gemini-2.0-flash-thinking-exp")
+
 
 
 # Configuration de l'analyse
