@@ -6,7 +6,7 @@ load_dotenv()
 
 # Configuration Gemini API (Google AI Studio)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash") # Par défaut 2.0-flash pour le thinking
+MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash") # gemini-2.5-flash est le plus récent et le plus rapide
 
 # Configuration Vertex AI (GCP)
 VERTEX_PROJECT_ID = os.getenv("VERTEX_PROJECT_ID", "")
