@@ -17,7 +17,27 @@ class KnowledgeGap(BaseModel):
     is_learning_gap: bool = Field(description="True si le prompt montre un besoin de formation/compréhension technique, False s'il s'agit d'une question générale, d'une tâche de routine ou d'un sujet informel (bruit).")
 
 class ExtractorResponse(BaseModel):
-    detected_gaps: List[KnowledgeGap] = Field(default=[], description="Liste des lacunes détectées dans le prompt.")
+    detected_gaps: List[KnowledgeGap] = Field(description="Liste des lacunes détectées dans le prompt.")
+
+def clean_schema(schema: dict) -> dict:
+    """
+    Nettoie récursivement un schéma JSON généré par Pydantic pour supprimer
+    les clés comme 'default' et 'title' qui provoquent des erreurs de validation
+    avec les API Gemini et Vertex AI.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    cleaned = {}
+    for k, v in schema.items():
+        if k in ("default", "title"):
+            continue
+        if isinstance(v, dict):
+            cleaned[k] = clean_schema(v)
+        elif isinstance(v, list):
+            cleaned[k] = [clean_schema(item) if isinstance(item, dict) else item for item in v]
+        else:
+            cleaned[k] = v
+    return cleaned
 
 class PromptExtractor:
     def __init__(self):
@@ -42,11 +62,13 @@ class PromptExtractor:
             return self._simulate_extraction(prompt)
             
         try:
-            # Utiliser la génération de contenu structuré (Structured Output)
-            # Les deux SDKs (Google Genai et Vertex AI) supportent la config de réponse structurée
+            # Générer et nettoyer le schéma JSON de réponse pour l'API Gemini
+            raw_schema = ExtractorResponse.model_json_schema()
+            cleaned_schema = clean_schema(raw_schema)
+
             config = {
                 "response_mime_type": "application/json",
-                "response_schema": ExtractorResponse,
+                "response_schema": cleaned_schema,
                 "temperature": 0.1
             }
             
@@ -104,8 +126,9 @@ class PromptExtractor:
             try:
                 import google.generativeai as genai
                 genai.configure(api_key=GEMINI_API_KEY)
+                # Utiliser models/embedding-001 qui est universellement supporté et très stable
                 result = genai.embed_content(
-                    model="models/text-embedding-004",
+                    model="models/embedding-001",
                     content=text,
                     task_type="clustering"
                 )
