@@ -527,11 +527,11 @@ export default function App() {
                     >
                       <div 
                         style={{ 
-                          backgroundColor: msg.role === 'user' ? 'var(--primary)' : 'rgba(255,255,255,0.04)',
-                          border: msg.role === 'user' ? 'none' : '1px solid var(--panel-border)',
+                          backgroundColor: msg.role === 'user' ? 'var(--primary)' : 'rgba(244, 63, 94, 0.08)',
+                          border: msg.role === 'user' ? 'none' : '1px solid rgba(244, 63, 94, 0.3)',
                           borderRadius: msg.role === 'user' ? '18px 18px 2px 18px' : '18px 18px 18px 2px',
                           padding: '12px 18px',
-                          color: 'white',
+                          color: msg.role === 'user' ? 'white' : '#f87171',
                           fontSize: '14px',
                           lineHeight: '1.5',
                           whiteSpace: 'pre-wrap'
