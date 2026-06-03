@@ -545,6 +545,35 @@ export default function App() {
                     </div>
                   ))
                 )}
+                {isSending && (
+                  <div 
+                    style={{ 
+                      alignSelf: 'flex-start',
+                      maxWidth: '70%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                      border: '1px solid rgba(244, 63, 94, 0.3)',
+                      borderRadius: '18px 18px 18px 2px',
+                      padding: '12px 18px',
+                      color: '#f87171',
+                      fontSize: '13px'
+                    }}
+                  >
+                    <div 
+                      style={{ 
+                        width: '14px', 
+                        height: '14px', 
+                        border: '2px solid rgba(244, 63, 94, 0.3)', 
+                        borderTopColor: '#f87171', 
+                        borderRadius: '50%', 
+                        animation: 'spin 0.8s linear infinite' 
+                      }}
+                    ></div>
+                    <span>L'IA analyse et réfléchit...</span>
+                  </div>
+                )}
                 <div ref={chatEndRef} />
               </div>
 
