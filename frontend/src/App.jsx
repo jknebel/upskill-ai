@@ -27,6 +27,7 @@ export default function App() {
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
   const [isSending, setIsSending] = useState(false);
+  const [spinnerText, setSpinnerText] = useState("L'IA analyse et réfléchit...");
   const [backendHealthy, setBackendHealthy] = useState(false);
   
   // Learner Dashboard Data
@@ -171,25 +172,66 @@ export default function App() {
     }
   };
 
-  // Charger le scénario de démo en 1 clic
+  // Charger le scénario de démo en 1 clic et injecter les questions de façon séquentielle
   const loadScenario = async (scenarioName) => {
+    const scenario = demoScenarios.find(s => s.name === scenarioName);
+    if (!scenario) return;
+
     setIsSending(true);
-    try {
-      const res = await fetch(`${API_URL}/api/demo/load`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: USER_ID, scenario: scenarioName })
-      });
-      if (res.ok) {
-        fetchChatHistory();
-        fetchLearnerData();
-        fetchManagerData();
+    
+    // Pour chaque question du scénario
+    for (let i = 0; i < scenario.prompts.length; i++) {
+      const prompt = scenario.prompts[i];
+      setSpinnerText("Traitement du texte...");
+      
+      // 1. Ajouter immédiatement le message utilisateur dans le chat local pour effet instantané
+      const localUserMsg = { 
+        id: `temp-user-${Date.now()}-${i}`, 
+        role: 'user', 
+        content: prompt, 
+        timestamp: new Date().toISOString() 
+      };
+      
+      // Utiliser le callback fonctionnel pour s'assurer qu'on travaille avec le state à jour
+      setChatHistory(prev => [...prev, localUserMsg]);
+      
+      try {
+        // 2. Envoyer la question individuelle à l'API de chat
+        const res = await fetch(`${API_URL}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: USER_ID, message: prompt })
+        });
+        const data = await res.json();
+        
+        // 3. Ajouter immédiatement la réponse de l'assistant localement
+        const localAssistantMsg = {
+          id: `temp-ast-${Date.now()}-${i}`,
+          role: 'assistant',
+          content: data.response,
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory(prev => [...prev, localAssistantMsg]);
+        
+        // Rafraîchir les tableaux de bord après chaque message traité
+        await fetchLearnerData();
+        await fetchManagerData();
+      } catch (err) {
+        console.error(err);
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSending(false);
+      
+      // Pause de 1,5 seconde entre la réponse et la question suivante pour simuler une conversation
+      if (i < scenario.prompts.length - 1) {
+        setSpinnerText("Préparation de la question suivante...");
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
     }
+    
+    setIsSending(false);
+    setSpinnerText("L'IA analyse et réfléchit...");
+    
+    // Mettre à jour l'historique final pour s'assurer que les identifiants et le timing sont synchronisés
+    fetchChatHistory();
   };
 
   // Lancer l'analyse Cron (Clustering + Génération)
@@ -571,7 +613,7 @@ export default function App() {
                         animation: 'spin 0.8s linear infinite' 
                       }}
                     ></div>
-                    <span>L'IA analyse et réfléchit...</span>
+                    <span>{spinnerText}</span>
                   </div>
                 )}
                 <div ref={chatEndRef} />
