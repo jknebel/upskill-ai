@@ -1,0 +1,302 @@
+import json
+import logging
+import os
+from typing import TypedDict, List, Dict, Any
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.graph import StateGraph, START, END
+from backend.config import GEMINI_API_KEY, MODEL_NAME
+
+from backend.utils.llm import get_langchain_llm
+
+logger = logging.getLogger(__name__)
+
+# Définition de l'état du Graph LangGraph
+class AgentState(TypedDict):
+    topic: str
+    description: str
+    course_content: str
+    quiz: List[Dict[str, Any]]
+    podcast_script: List[Dict[str, str]]
+
+# --- NOEUD 1 : Génération du Cours ---
+def generate_course_node(state: AgentState) -> Dict[str, Any]:
+    topic = state["topic"]
+    description = state["description"]
+    
+    llm = get_langchain_llm(temperature=0.7)
+    if not llm:
+        logger.info("Simulation de génération de cours.")
+        return {"course_content": get_mock_course(topic)}
+
+        
+    prompt = ChatPromptTemplate.from_template(
+        "Tu es un enseignant expert. Crée un cours condensé, structuré et très clair en Markdown "
+        "sur le sujet suivant : '{topic}'.\n"
+        "Le cours doit s'adresser à quelqu'un qui a la lacune suivante : '{description}'.\n"
+        "Rends le cours interactif avec des exemples de code si nécessaire, et divise-le en 3 sections principales. "
+        "Le cours doit pouvoir se lire en 5 minutes environ pour notre POC."
+    )
+    
+    chain = prompt | llm
+    response = chain.invoke({"topic": topic, "description": description})
+    return {"course_content": response.content}
+
+# --- NOEUD 2 : Génération du Quiz ---
+def generate_quiz_node(state: AgentState) -> Dict[str, Any]:
+    topic = state["topic"]
+    course_content = state["course_content"]
+    
+    llm = get_langchain_llm(temperature=0.3)
+    if not llm:
+        logger.info("Simulation de génération de quiz.")
+        return {"quiz": get_mock_quiz(topic)}
+        
+    prompt = ChatPromptTemplate.from_template(
+        "En te basant sur le cours suivant :\n\n{course_content}\n\n"
+        "Génère un quiz de 3 questions à choix multiples (QCM) au format JSON.\n"
+        "Le JSON retourné doit être valide et respecter strictement la structure suivante :\n"
+        "[\n"
+        "  {{\n"
+        "    \"question\": \"Texte de la question\",\n"
+        "    \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"],\n"
+        "    \"answer\": \"L'option correcte exacte\"\n"
+        "  }}\n"
+        "]\n"
+        "Ne retourne RIEN d'autre que le JSON brut (pas de balises ```json ou markdown)."
+    )
+    
+    chain = prompt | llm
+    response = chain.invoke({"course_content": course_content})
+    try:
+        # Nettoyage des balises JSON si présentes malgré la consigne
+        text = response.content.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+        quiz_data = json.loads(text.strip())
+        return {"quiz": quiz_data}
+    except Exception as e:
+        logger.error(f"Erreur de parsing du quiz JSON : {e}. Utilisation du fallback.")
+        return {"quiz": get_mock_quiz(topic)}
+
+# --- NOEUD 3 : Génération du Podcast ---
+def generate_podcast_node(state: AgentState) -> Dict[str, Any]:
+    topic = state["topic"]
+    course_content = state["course_content"]
+    
+    llm = get_langchain_llm(temperature=0.7)
+    if not llm:
+        logger.info("Simulation de génération de podcast.")
+        return {"podcast_script": get_mock_podcast(topic)}
+        
+    prompt = ChatPromptTemplate.from_template(
+        "Tu es un scénariste de podcast de vulgarisation scientifique et technique.\n"
+        "En te basant sur le cours suivant : \n\n{course_content}\n\n"
+        "Rédige un script de podcast à deux voix (Hôte A: l'expert pédagogue, Hôte B: le co-animateur curieux et candide).\n"
+        "Le dialogue doit être très dynamique, plein d'enthousiasme, avec des questions/réponses rapides.\n"
+        "Retourne le script sous forme d'un tableau JSON d'objets structurés de la façon suivante :\n"
+        "[\n"
+        "  {{\n"
+        "    \"speaker\": \"Hôte A\",\n"
+        "    \"text\": \"Bonjour et bienvenue dans notre micro-capsule d'apprentissage ! Aujourd'hui on parle de...\"\n"
+        "  }},\n"
+        "  {{\n"
+        "    \"speaker\": \"Hôte B\",\n"
+        "    \"text\": \"Salut ! Oui, et c'est un sujet super intéressant parce que beaucoup de gens font l'erreur...\"\n"
+        "  }}\n"
+        "]\n"
+        "Génère environ 6 à 10 répliques au total pour ce court podcast de démonstration.\n"
+        "Ne retourne RIEN d'autre que le JSON brut (pas de balises ```json ou markdown)."
+    )
+    
+    chain = prompt | llm
+    response = chain.invoke({"course_content": course_content})
+    try:
+        text = response.content.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+        script_data = json.loads(text.strip())
+        return {"podcast_script": script_data}
+    except Exception as e:
+        logger.error(f"Erreur de parsing du script de podcast : {e}. Utilisation du fallback.")
+        return {"podcast_script": get_mock_podcast(topic)}
+
+# --- CONSTRUCTION DU GRAPHE LANGGRAPH ---
+def build_generation_graph():
+    workflow = StateGraph(AgentState)
+    
+    # Ajouter les nœuds
+    workflow.add_node("generate_course", generate_course_node)
+    workflow.add_node("generate_quiz", generate_quiz_node)
+    workflow.add_node("generate_podcast", generate_podcast_node)
+    
+    # Relier les nœuds
+    workflow.add_edge(START, "generate_course")
+    workflow.add_edge("generate_course", "generate_quiz")
+    workflow.add_edge("generate_course", "generate_podcast")
+    workflow.add_edge("generate_quiz", END)
+    workflow.add_edge("generate_podcast", END)
+    
+    return workflow.compile()
+
+# --- INSTANCE DU GRAPH COMPILÉ ---
+generator_agent = build_generation_graph()
+
+def generate_learning_assets(topic: str, description: str) -> Dict[str, Any]:
+    """
+    Fonction principale à appeler pour lancer la génération de cours, quiz et podcast.
+    """
+    initial_state = {
+        "topic": topic,
+        "description": description,
+        "course_content": "",
+        "quiz": [],
+        "podcast_script": []
+    }
+    
+    result = generator_agent.invoke(initial_state)
+    return {
+        "course_content": result["course_content"],
+        "quiz": result["quiz"],
+        "podcast_script": result["podcast_script"]
+    }
+
+# --- CONTENU SIMULÉ DE FALLBACK (POUR DÉMO INSTANTANÉE EN LOCAL) ---
+
+def get_mock_course(topic: str) -> str:
+    if "pandas" in topic.lower():
+        return """# Fusionner des DataFrames avec Pandas 🐼
+
+La fusion de données est l'une des tâches les plus fréquentes en Data Science. En Pandas, cela se fait principalement via la fonction `pd.merge()`.
+
+## 1. Différence entre `merge()` et `join()`
+* `pd.merge()` : Fusionne sur la base de colonnes communes (très flexible, similaire à un JOIN SQL).
+* `DataFrame.join()` : Fusionne principalement sur la base des index des DataFrames.
+
+## 2. Les différents types de jointures (How)
+Comme en SQL, vous disposez de 4 modes principaux :
+* **Inner Join** (Par défaut) : Ne garde que les clés présentes dans les deux DataFrames.
+* **Left Join** : Garde toutes les lignes du DataFrame de gauche, et ajoute les correspondances de droite.
+* **Right Join** : Garde toutes les lignes du DataFrame de droite.
+* **Outer Join** : Garde toutes les lignes des deux DataFrames en insérant des `NaN` s'il n'y a pas de correspondance.
+
+## 3. Exemple de code
+```python
+import pandas as pd
+
+df1 = pd.DataFrame({'id': [1, 2], 'nom': ['Alice', 'Bob']})
+df2 = pd.DataFrame({'id': [1, 3], 'score': [95, 80]})
+
+# Jointure à gauche (Left Join)
+resultat = pd.merge(df1, df2, on='id', how='left')
+print(resultat)
+```
+"""
+    elif "docker" in topic.lower():
+        return """# Maîtriser les volumes Docker 🐳
+
+Par défaut, les données créées à l'intérieur d'un conteneur Docker sont éphémères. Si le conteneur est supprimé, les données le sont aussi. Pour persister les données, Docker utilise les **Volumes**.
+
+## 1. Qu'est-ce qu'un volume Docker ?
+Un volume est un dossier géré par Docker sur la machine hôte. Il est totalement indépendant du cycle de vie des conteneurs.
+
+## 2. Différence entre Volume et Bind Mount
+* **Volume** : Géré par Docker. Stocké dans une zone dédiée (`/var/lib/docker/volumes/` sur Linux). Recommandé pour persister les données.
+* **Bind Mount** : Relie un dossier spécifique de votre machine hôte (ex: `C:/projets/app`) à un dossier du conteneur. Parfait pour le développement à chaud.
+
+## 3. Commandes essentielles
+```bash
+# Créer un volume
+docker volume create mon_volume
+
+# Monter le volume dans un conteneur
+docker run -d -v mon_volume:/data alpine
+```
+"""
+    # Default is Upskill AI (recursive demo)
+    return """# Découverte du projet Upskill AI 🚀
+
+Bienvenue dans le cours d'introduction à **Upskill AI**. Cet outil réinvente la formation professionnelle continue en y intégrant de l'IA agentique passive.
+
+## 1. Le flux d'analyse
+Upskill AI analyse silencieusement vos prompts de chat quotidiens. À chaque prompt, l'**Agent Extracteur** isole les concepts non maîtrisés (lacunes) et en génère un embedding vectoriel.
+
+## 2. Détection temporelle (Clustering)
+Un job d'analyse regroupe les lacunes similaires. Grâce à un algorithme de décroissance temporelle (dépréciation exponentielle), le système fait la différence entre un besoin ponctuel et une lacune persistante. Si vous posez 20 questions sur Docker en une matinée, le système détecte l'urgence et génère votre formation.
+
+## 3. Les ressources générées
+Une fois le besoin détecté, le système génère un cours écrit synthétique, un quiz interactif de 3 questions, et un podcast dialogue dynamique avec 2 voix IA (Hôte A et Hôte B) pour vous expliquer le concept !
+"""
+
+def get_mock_quiz(topic: str) -> List[Dict[str, Any]]:
+    if "pandas" in topic.lower():
+        return [
+            {
+                "question": "Quelle fonction Pandas est la plus flexible pour effectuer des jointures sur des colonnes ?",
+                "options": ["df.join()", "pd.merge()", "pd.concat()", "df.combine()"],
+                "answer": "pd.merge()"
+            },
+            {
+                "question": "Quel type de jointure conserve toutes les lignes du DataFrame de gauche ?",
+                "options": ["inner", "outer", "left", "right"],
+                "answer": "left"
+            }
+        ]
+    elif "docker" in topic.lower():
+        return [
+            {
+                "question": "Où sont stockés les volumes gérés par Docker sous Linux ?",
+                "options": ["/etc/docker/", "/var/lib/docker/volumes/", "/tmp/docker/", "/home/user/volumes/"],
+                "answer": "/var/lib/docker/volumes/"
+            },
+            {
+                "question": "Quelle option permet de monter un volume lors d'un docker run ?",
+                "options": ["-p", "-d", "-v", "--link"],
+                "answer": "-v"
+            }
+        ]
+    return [
+        {
+            "question": "Comment s'appelle l'algorithme qui regroupe les lacunes sémantiquement proches dans Upskill AI ?",
+            "options": ["K-Means", "DBSCAN", "Régression linéaire", "Random Forest"],
+            "answer": "DBSCAN"
+        },
+        {
+            "question": "Pourquoi applique-t-on une pondération temporelle aux lacunes ?",
+            "options": ["Pour économiser de la mémoire", "Pour accorder plus de poids aux difficultés récentes", "Pour trier par ordre alphabétique", "Pour masquer l'identité des utilisateurs"],
+            "answer": "Pour accorder plus de poids aux difficultés récentes"
+        }
+    ]
+
+def get_mock_podcast(topic: str) -> List[Dict[str, str]]:
+    if "pandas" in topic.lower():
+        return [
+            {"speaker": "Hôte A", "text": "Bonjour à tous ! Aujourd'hui, on s'attaque à un monument de l'analyse de données en Python : les jointures Pandas !"},
+            {"speaker": "Hôte B", "text": "Salut ! Ah oui, Pandas ! J'avoue que je m'emmêle toujours les pinceaux entre merge et join. C'est quoi la vraie différence ?"},
+            {"speaker": "Hôte A", "text": "C'est une excellente question. En gros, retiens que merge() est le plus puissant : il te permet de fusionner sur n'importe quelles colonnes communes, comme en SQL. Alors que join() est conçu pour fusionner en utilisant les index des tables."},
+            {"speaker": "Hôte B", "text": "D'accord, donc merge pour les colonnes, join pour les index. Et pour les types de jointures ? Left, right, inner... ?"},
+            {"speaker": "Hôte A", "text": "Exactement ! Par défaut, merge fait un 'inner join', ce qui veut dire qu'il ne garde que les éléments présents dans les deux DataFrames. Si tu veux tout garder d'un côté, tu utilises left ou right. Et si tu veux la totale, c'est outer !"},
+            {"speaker": "Hôte B", "text": "Génial, tout s'éclaire ! Merci pour cette capsule rapide, je file tester ça sur mes DataFrames !"}
+        ]
+    elif "docker" in topic.lower():
+        return [
+            {"speaker": "Hôte A", "text": "Bienvenue dans notre capsule tech ! Aujourd'hui, on parle de persistance avec Docker, et plus particulièrement des volumes."},
+            {"speaker": "Hôte B", "text": "Salut ! Oui, parce que j'ai perdu toutes mes données de base de données en arrêtant mon conteneur la semaine dernière... C'était la panique !"},
+            {"speaker": "Hôte A", "text": "Aïe ! Classique. Par défaut, un conteneur est éphémère. Pour éviter cela, on monte un Volume. C'est un dossier géré par Docker sur ta machine qui survit à la destruction du conteneur."},
+            {"speaker": "Hôte B", "text": "Et comment on fait ça en ligne de commande ?"},
+            {"speaker": "Hôte A", "text": "Très simple : tu ajoutes l'option tiret v, suivi du nom de ton volume, deux points, et le dossier cible dans ton conteneur. Par exemple : `-v mon_volume:/data`."},
+            {"speaker": "Hôte B", "text": "Super simple en fait ! Plus d'excuses pour perdre mes données. Merci !"}
+        ]
+    return [
+        {"speaker": "Hôte A", "text": "Bonjour et bienvenue pour ce focus sur notre projet : Upskill AI !"},
+        {"speaker": "Hôte B", "text": "Salut ! Je trouve l'idée géniale : un outil qui détecte ce que je ne sais pas faire rien qu'en lisant mes questions au chatbot ! C'est magique ou c'est de l'IA ?"},
+        {"speaker": "Hôte A", "text": "C'est de l'IA et de l'analyse intelligente ! En arrière-plan, chaque question passe par un Agent Extracteur qui repère les lacunes techniques. Ensuite, on utilise le clustering DBSCAN sur les embeddings de ces lacunes."},
+        {"speaker": "Hôte B", "text": "D'accord, mais si je pose une question bête sur mes vacances, ça va me générer un cours sur le camping ?"},
+        {"speaker": "Hôte A", "text": "Non ! D'abord, l'agent élimine le bruit. Ensuite, l'algorithme applique une décroissance temporelle exponentielle. Les questions isolées ou anciennes perdent de leur poids, tandis que les difficultés répétées et récentes forment un groupe solide."},
+        {"speaker": "Hôte B", "text": "Et dès que le groupe est assez important, paf, ça génère ce cours, ce quiz et ce super podcast qu'on est en train d'enregistrer !"},
+        {"speaker": "Hôte A", "text": "Exactement ! Tu as tout compris. C'est l'essence même de l'apprentissage adaptatif de demain."}
+    ]

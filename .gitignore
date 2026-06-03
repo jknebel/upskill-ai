@@ -1,0 +1,18 @@
+# Python
+backend/venv/
+backend/.env
+**/__pycache__/
+*.pyc
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Local Storage Simulation
+backend/data/*.json
+
+# IDE
+.vscode/
+.idea/
+.DS_Store

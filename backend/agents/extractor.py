@@ -1,0 +1,156 @@
+import json
+import logging
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from backend.config import GEMINI_API_KEY, MODEL_NAME, USE_VERTEX_AI
+from backend.utils.llm import get_generative_model
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Schéma Pydantic pour la réponse structurée
+class KnowledgeGap(BaseModel):
+    topic: str = Field(description="Le sujet général de la lacune identifiée, par exemple 'Pandas DataFrames', 'Docker Volumes', 'SQL Joins'.")
+    gap_description: str = Field(description="Description précise de ce que l'utilisateur ne sait pas ou tente de comprendre.")
+    confidence: float = Field(description="Score de confiance entre 0.0 et 1.0 sur le fait qu'il s'agit d'une réelle lacune.")
+    is_learning_gap: bool = Field(description="True si le prompt montre un besoin de formation/compréhension technique, False s'il s'agit d'une question générale, d'une tâche de routine ou d'un sujet informel (bruit).")
+
+class ExtractorResponse(BaseModel):
+    detected_gaps: List[KnowledgeGap] = Field(default=[], description="Liste des lacunes détectées dans le prompt.")
+
+class PromptExtractor:
+    def __init__(self):
+        pass
+        
+    def extract_gaps(self, prompt: str) -> List[dict]:
+        """
+        Analyse un prompt utilisateur pour identifier les lacunes en connaissances/compétences.
+        """
+        system_instruction = (
+            "Tu es un agent d'analyse pédagogique. Ton rôle est d'analyser le prompt d'un utilisateur "
+            "pour extraire ce qu'il NE SAIT PAS ou ce qu'il a du mal à maîtriser (ses lacunes cognitives/techniques). "
+            "Sois précis. Si le prompt est une question banale sur la météo ou des vacances, indique que ce n'est pas "
+            "une lacune d'apprentissage ('is_learning_gap': false). "
+            "S'il demande comment faire une jointure complexe en Pandas parce qu'il s'emmêle les pinceaux, c'est une "
+            "lacune ('is_learning_gap': true)."
+        )
+        
+        model = get_generative_model(system_instruction=system_instruction)
+        if not model:
+            # Mode Simulation si aucune clé ou config dispo
+            return self._simulate_extraction(prompt)
+            
+        try:
+            # Utiliser la génération de contenu structuré (Structured Output)
+            # Les deux SDKs (Google Genai et Vertex AI) supportent la config de réponse structurée
+            config = {
+                "response_mime_type": "application/json",
+                "response_schema": ExtractorResponse,
+                "temperature": 0.1
+            }
+            
+            # Gestion de la différence légère d'appel dans Vertex vs GenAI
+            if USE_VERTEX_AI:
+                # Vertex AI SDK
+                from vertexai.generative_models import GenerationConfig
+                generation_config = GenerationConfig(**config)
+                response = model.generate_content(
+                    f"Analyse le prompt utilisateur suivant :\n\n\"\"\"\n{prompt}\n\"\"\"",
+                    generation_config=generation_config
+                )
+            else:
+                # Google AI Studio SDK
+                import google.generativeai as genai
+                generation_config = genai.GenerationConfig(**config)
+                response = model.generate_content(
+                    f"Analyse le prompt utilisateur suivant :\n\n\"\"\"\n{prompt}\n\"\"\"",
+                    generation_config=generation_config
+                )
+            
+            data = json.loads(response.text)
+            # Ne conserver que les vraies lacunes d'apprentissage avec une confiance minimale
+            gaps = [
+                gap for gap in data.get("detected_gaps", [])
+                if gap.get("is_learning_gap") and gap.get("confidence", 0) > 0.5
+            ]
+            
+            # Ajouter un embedding pour chaque lacune
+            for gap in gaps:
+                gap["embedding"] = self.generate_embedding(gap["topic"])
+                
+            return gaps
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de l'extraction par le LLM : {e}")
+            return self._simulate_extraction(prompt)
+
+    def generate_embedding(self, text: str) -> List[float]:
+        """
+        Génère un embedding vectoriel pour le texte spécifié.
+        """
+        # 1. Utilisation de Vertex AI si actif
+        if USE_VERTEX_AI:
+            try:
+                from vertexai.language_models import TextEmbeddingModel
+                model = TextEmbeddingModel.from_pretrained("text-embedding-004")
+                embeddings = model.get_embeddings([text])
+                return [float(x) for x in embeddings[0].values]
+            except Exception as e:
+                logger.error(f"Erreur d'embedding Vertex AI : {e}")
+                
+        # 2. Utilisation de Google AI Studio
+        if GEMINI_API_KEY:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=GEMINI_API_KEY)
+                result = genai.embed_content(
+                    model="models/text-embedding-004",
+                    content=text,
+                    task_type="clustering"
+                )
+                return result['embedding']
+            except Exception as e:
+                logger.error(f"Erreur d'embedding Google AI Studio : {e}")
+                
+        # Fallback simulation
+        import random
+        random.seed(text)
+        return [random.uniform(-1, 1) for _ in range(16)]
+
+    def _simulate_extraction(self, prompt: str) -> List[dict]:
+        """
+        Simulation d'extraction pour tests sans clé API.
+        """
+        prompt_lower = prompt.lower()
+        gaps = []
+        
+        # Démo : Pandas
+        if "pandas" in prompt_lower or "dataframe" in prompt_lower or "merge" in prompt_lower or "join" in prompt_lower:
+            gaps.append({
+                "topic": "Pandas DataFrames",
+                "gap_description": "Difficulté à manipuler, fusionner (merge/join) et nettoyer des DataFrames avec Pandas.",
+                "confidence": 0.95,
+                "is_learning_gap": True
+            })
+        # Démo : Docker
+        elif "docker" in prompt_lower or "volume" in prompt_lower or "container" in prompt_lower:
+            gaps.append({
+                "topic": "Docker Containers",
+                "gap_description": "Manque de maîtrise de la gestion des volumes et du réseau entre conteneurs Docker.",
+                "confidence": 0.90,
+                "is_learning_gap": True
+            })
+        # Démo : Upskill AI
+        elif "upskill" in prompt_lower or "poc" in prompt_lower or "agent" in prompt_lower:
+            gaps.append({
+                "topic": "Upskill AI & Agentic",
+                "gap_description": "Compréhension de l'architecture d'analyse passive des prompts et de génération de podcasts pédagogiques.",
+                "confidence": 0.98,
+                "is_learning_gap": True
+            })
+            
+        for gap in gaps:
+            gap["embedding"] = self.generate_embedding(gap["topic"])
+            
+        return gaps
