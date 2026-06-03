@@ -15,11 +15,11 @@ COPY requirements.txt .
 # Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier le code du backend
-COPY . .
+# Copier le code du backend dans un sous-dossier 'backend'
+COPY . ./backend
 
 # Exposer le port par défaut (8080 pour Cloud Run)
 EXPOSE 8080
 
-# Commande pour démarrer l'application FastAPI
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Commande pour démarrer l'application FastAPI en tant que package
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8080"]
