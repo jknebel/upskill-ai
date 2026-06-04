@@ -522,22 +522,7 @@ export default function App() {
 
               {demoScenarios.map((scenario) => (
                 <div key={scenario.name} className="glass-panel" style={{ padding: '16px', background: 'rgba(255,255,255,0.02)' }}>
-                  <h4 style={{ fontSize: '14px', color: 'white', marginBottom: '10px' }}>{scenario.title}</h4>
-                  
-                  {/* Clickable Prompts List */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
-                    {scenario.prompts.map((p, pIdx) => (
-                      <button 
-                        key={pIdx} 
-                        onClick={() => handleSendMessage(p)}
-                        style={{ textAlign: 'left', background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '11px', cursor: 'pointer', padding: '4px', borderLeft: '2px solid var(--panel-border)', transition: 'all 0.2s' }}
-                        onMouseEnter={(e) => { e.target.style.color = 'white'; e.target.style.borderLeftColor = 'var(--primary)'; }}
-                        onMouseLeave={(e) => { e.target.style.color = 'var(--text-secondary)'; e.target.style.borderLeftColor = 'var(--panel-border)'; }}
-                      >
-                        "{p.slice(0, 50)}..."
-                      </button>
-                    ))}
-                  </div>
+                  <h4 style={{ fontSize: '14px', color: 'white', marginBottom: '12px' }}>{scenario.title}</h4>
 
                   <button 
                     onClick={() => loadScenario(scenario.name)}
