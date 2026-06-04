@@ -233,9 +233,14 @@ export default function App() {
     // Mettre à jour l'historique final pour s'assurer que les identifiants et le timing sont synchronisés
     await fetchChatHistory();
 
-    // === DÉCLENCHEMENT AUTOMATIQUE DU CRON ===
-    // Après toutes les questions, le cron se déclenche et génère le contenu
+    // === ATTENTE DES EXTRACTIONS EN ARRIÈRE-PLAN ===
+    // Les extractions de lacunes tournent en BackgroundTask côté serveur.
+    // On attend quelques secondes pour s'assurer qu'elles sont terminées.
     setIsSending(true);
+    setSpinnerText("🔍 Extraction des lacunes en cours...");
+    await new Promise(resolve => setTimeout(resolve, 6000));
+
+    // === DÉCLENCHEMENT AUTOMATIQUE DU CRON ===
     setSpinnerText("⚡ Cron déclenché — Clustering & Génération du cours en cours...");
     
     try {

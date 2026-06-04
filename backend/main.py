@@ -61,7 +61,15 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     if GEMINI_API_KEY:
         try:
             import google.generativeai as genai
-            model = genai.GenerativeModel(MODEL_CHATBOT)
+            model = genai.GenerativeModel(
+                MODEL_CHATBOT,
+                system_instruction=(
+                    "Tu es un assistant technique concis. "
+                    "Réponds TOUJOURS en maximum 2-3 lignes courtes. "
+                    "Va droit au but, pas de longs paragraphes ni de listes détaillées. "
+                    "Si la question est hors-sujet technique, réponds brièvement avec humour."
+                )
+            )
             # Récupérer l'historique récent pour donner du contexte au modèle
             history = storage.get_chat_history(user_id)[-10:]
             chat_history_gemini = []
