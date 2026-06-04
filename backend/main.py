@@ -183,7 +183,8 @@ def trigger_analysis(request: TriggerRequest):
             topic=topic,
             course_content=assets["course_content"],
             quiz=assets["quiz"],
-            podcast_script=assets["podcast_script"]
+            podcast_script=assets["podcast_script"],
+            podcast_audio=assets.get("podcast_audio")
         )
         generated_courses.append(course_doc)
         

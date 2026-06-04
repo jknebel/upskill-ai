@@ -349,6 +349,8 @@ def build_generation_graph():
 # --- INSTANCE DU GRAPH COMPILÉ ---
 generator_agent = build_generation_graph()
 
+from backend.utils.tts import generate_podcast_audio
+
 def generate_learning_assets(topic: str, description: str) -> Dict[str, Any]:
     """
     Fonction principale à appeler pour lancer la génération de cours, quiz et podcast.
@@ -367,10 +369,15 @@ def generate_learning_assets(topic: str, description: str) -> Dict[str, Any]:
     }
 
     result = generator_agent.invoke(initial_state)
+    
+    # Génération audio TTS
+    podcast_audio = generate_podcast_audio(result["podcast_script"])
+    
     return {
         "course_content": result["course_content"],
         "quiz": result["quiz"],
-        "podcast_script": result["podcast_script"]
+        "podcast_script": result["podcast_script"],
+        "podcast_audio": podcast_audio
     }
 
 # ============================================================================

@@ -82,7 +82,7 @@ class JSONStorage:
         self._write_file(self.gaps_file, gaps)
 
     # --- COURSES, QUIZZES & PODCASTS ---
-    def save_course(self, user_id: str, topic: str, course_content: str, quiz: List[Dict[str, Any]], podcast_script: List[Dict[str, str]]) -> Dict[str, Any]:
+    def save_course(self, user_id: str, topic: str, course_content: str, quiz: List[Dict[str, Any]], podcast_script: List[Dict[str, str]], podcast_audio: str = None) -> Dict[str, Any]:
         courses = self._read_file(self.courses_file)
         course_doc = {
             "id": str(uuid.uuid4()),
@@ -91,6 +91,7 @@ class JSONStorage:
             "course_content": course_content,
             "quiz": quiz,
             "podcast_script": podcast_script,
+            "podcast_audio": podcast_audio,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
         courses.append(course_doc)

@@ -34,6 +34,7 @@ export default function App() {
   const [courses, setCourses] = useState([]);
   const [pendingTopics, setPendingTopics] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizScore, setQuizScore] = useState(null);
   
@@ -395,6 +396,7 @@ export default function App() {
     setSelectedCourse(course);
     setQuizScore(null);
     setQuizAnswers({});
+    setIsCourseModalOpen(false);
   };
 
   // Gérer la soumission du Quiz
@@ -729,131 +731,137 @@ export default function App() {
 
             {/* MAIN LEARNING VIEW */}
             {selectedCourse ? (
-              <div style={{ flex: 1, display: 'flex', gap: '16px', overflow: 'hidden' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px', overflowY: 'auto', padding: '16px' }}>
                 
-                {/* COURSE CONTENT */}
-                <div className="glass-panel" style={{ flex: 1, padding: '32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {renderMarkdown(selectedCourse.course_content)}
+                {/* HEADER ET BOUTON COURS */}
+                <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 className="glow-text-primary" style={{ fontSize: '20px', marginBottom: '8px' }}>{selectedCourse.topic}</h3>
+                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Formation générée automatiquement</span>
+                  </div>
+                  <button 
+                    onClick={() => setIsCourseModalOpen(true)}
+                    className="btn btn-primary"
+                    style={{ padding: '12px 24px', fontSize: '14px', display: 'flex', gap: '8px', alignItems: 'center', boxShadow: '0 0 20px rgba(99, 102, 241, 0.4)' }}
+                  >
+                    <BookOpen size={20} /> Lire le cours complet (PDF)
+                  </button>
                 </div>
 
-                {/* PODCAST & QUIZ SIDE PANEL */}
-                <div style={{ width: '400px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+                {/* PODCAST AUDIO PLAYER (REAL TTS) */}
+                <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', padding: '24px', background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)', borderColor: 'rgba(99, 102, 241, 0.2)' }}>
+                  <h4 style={{ fontSize: '15px', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                    <Volume2 color="var(--primary)" /> Podcast Audio (Voix Réelles)
+                  </h4>
                   
-                  {/* PODCAST CARD */}
-                  {selectedCourse.podcast_script && selectedCourse.podcast_script.length > 0 && (
-                    <div className="glass-panel" style={{ padding: '24px', background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)', borderColor: 'rgba(99, 102, 241, 0.2)' }}>
-                      <h4 style={{ fontSize: '15px', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                        <Volume2 color="var(--primary)" /> Podcast double voix (NotebookLM Style)
-                      </h4>
-                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.4' }}>
-                        Écoutez deux experts IA résumer de façon vivante et interactive le contenu de votre formation.
+                  {selectedCourse.podcast_audio ? (
+                    <div>
+                      <audio controls style={{ width: '100%', borderRadius: '8px', outline: 'none', height: '40px' }} src={selectedCourse.podcast_audio}></audio>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px', textAlign: 'center' }}>
+                        Deux experts IA résument ce concept en moins de 3 minutes. (Généré par Google Cloud TTS)
                       </p>
-
-                      {/* AUDIO PLAYER CONTROLS */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '16px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px', textAlign: 'center' }}>
+                      <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Le fichier audio est en cours de génération ou l'API TTS n'est pas configurée.</p>
+                      
+                      {/* Fallback player local */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '12px' }}>
                         {!isPlayingPodcast ? (
-                          <button onClick={playPodcast} className="btn btn-primary" style={{ borderRadius: '50%', width: '48px', height: '48px', padding: 0 }}>
-                            <Play size={20} fill="white" />
+                          <button onClick={playPodcast} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '12px' }}>
+                            <Play size={14} style={{ marginRight: '6px' }} /> Jouer la voix robotique locale
                           </button>
                         ) : (
-                          <button onClick={stopPodcast} className="btn btn-accent" style={{ borderRadius: '50%', width: '48px', height: '48px', padding: 0 }}>
-                            <Pause size={20} fill="white" />
+                          <button onClick={stopPodcast} className="btn btn-accent" style={{ padding: '8px 16px', fontSize: '12px' }}>
+                            <Pause size={14} style={{ marginRight: '6px' }} /> Stopper la voix locale
                           </button>
                         )}
-                        <div>
-                          <span style={{ fontSize: '13px', color: 'white', fontWeight: 'bold', display: 'block' }}>
-                            {isPlayingPodcast ? 'Lecture en cours...' : 'Podcast prêt'}
-                          </span>
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            {selectedCourse.podcast_script.length} répliques alternées
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* DIALOGUE VISUALIZATION FEED */}
-                      <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-sm)' }}>
-                        {selectedCourse.podcast_script.map((line, idx) => (
-                          <div 
-                            key={idx} 
-                            style={{ 
-                              padding: '6px 10px', 
-                              borderRadius: '6px',
-                              fontSize: '11px',
-                              lineHeight: '1.4',
-                              backgroundColor: idx === currentLineIndex ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-                              borderLeft: '3px solid',
-                              borderLeftColor: idx === currentLineIndex ? 'var(--primary)' : (line.speaker === 'Hôte A' ? 'var(--accent-cyan)' : 'var(--secondary)'),
-                              color: idx === currentLineIndex ? 'white' : 'var(--text-secondary)',
-                              transition: 'all 0.2s'
-                            }}
-                          >
-                            <strong style={{ color: line.speaker === 'Hôte A' ? 'var(--accent-cyan)' : 'var(--secondary)' }}>{line.speaker}</strong> : {line.text}
-                          </div>
-                        ))}
                       </div>
                     </div>
                   )}
 
-                  {/* QUIZ CARD */}
-                  {selectedCourse.quiz && selectedCourse.quiz.length > 0 && (
-                    <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <h4 style={{ fontSize: '15px', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Award color="var(--accent-cyan)" /> Test de validation
-                      </h4>
-                      
-                      {selectedCourse.quiz.map((q, qIdx) => (
-                        <div key={qIdx} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          <span style={{ fontSize: '13px', color: 'white', fontWeight: '500' }}>{qIdx + 1}. {q.question}</span>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {q.options.map((opt, optIdx) => (
-                              <button 
-                                key={optIdx}
-                                onClick={() => handleQuizAnswer(qIdx, opt)}
-                                style={{ 
-                                  textAlign: 'left',
-                                  padding: '8px 12px',
-                                  fontSize: '12px',
-                                  borderRadius: '6px',
-                                  cursor: 'pointer',
-                                  border: '1px solid',
-                                  backgroundColor: quizAnswers[qIdx] === opt ? 'var(--primary-glow)' : 'rgba(255,255,255,0.01)',
-                                  borderColor: quizAnswers[qIdx] === opt ? 'var(--primary)' : 'var(--panel-border)',
-                                  color: quizAnswers[qIdx] === opt ? 'white' : 'var(--text-secondary)',
-                                  transition: 'all 0.15s'
-                                }}
-                              >
-                                {opt}
-                              </button>
-                            ))}
-                          </div>
+                  {/* SCRIPT TRANSCRIPT */}
+                  {selectedCourse.podcast_script && selectedCourse.podcast_script.length > 0 && (
+                    <div style={{ marginTop: '20px', maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-sm)' }}>
+                      {selectedCourse.podcast_script.map((line, idx) => (
+                        <div 
+                          key={idx} 
+                          style={{ 
+                            padding: '6px 10px', 
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            lineHeight: '1.4',
+                            backgroundColor: idx === currentLineIndex ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                            borderLeft: '3px solid',
+                            borderLeftColor: idx === currentLineIndex ? 'var(--primary)' : (line.speaker === 'Hôte A' ? 'var(--accent-cyan)' : 'var(--secondary)'),
+                            color: idx === currentLineIndex ? 'white' : 'var(--text-secondary)'
+                          }}
+                        >
+                          <strong style={{ color: line.speaker === 'Hôte A' ? 'var(--accent-cyan)' : 'var(--secondary)' }}>{line.speaker}</strong> : {line.text}
                         </div>
                       ))}
-
-                      {quizScore === null ? (
-                        <button 
-                          className="btn btn-accent" 
-                          onClick={submitQuiz}
-                          disabled={Object.keys(quizAnswers).length < selectedCourse.quiz.length}
-                          style={{ width: '100%', marginTop: '10px' }}
-                        >
-                          Valider mes réponses
-                        </button>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(6, 182, 212, 0.05)', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
-                          <CheckCircle2 color="var(--accent-cyan)" size={32} />
-                          <span style={{ color: 'white', fontWeight: 'bold' }}>Quiz Validé !</span>
-                          <span style={{ fontSize: '18px', color: 'var(--accent-cyan)', fontWeight: '800' }}>
-                            {quizScore} / {selectedCourse.quiz.length} Correct
-                          </span>
-                          <button onClick={() => setQuizScore(null)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', marginTop: '6px' }}>
-                            Recommencer
-                          </button>
-                        </div>
-                      )}
                     </div>
                   )}
-
                 </div>
+
+                {/* QUIZ (FULL WIDTH OF CONTAINER) */}
+                {selectedCourse.quiz && selectedCourse.quiz.length > 0 && (
+                  <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '40px' }}>
+                    <h4 style={{ fontSize: '18px', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Award color="var(--accent-cyan)" /> Test de validation des acquis
+                    </h4>
+                    
+                    {selectedCourse.quiz.map((q, qIdx) => (
+                      <div key={qIdx} style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px', borderBottom: qIdx < selectedCourse.quiz.length - 1 ? '1px solid var(--panel-border)' : 'none' }}>
+                        <span style={{ fontSize: '15px', color: 'white', fontWeight: '500' }}>{qIdx + 1}. {q.question}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {q.options.map((opt, optIdx) => (
+                            <button 
+                              key={optIdx}
+                              onClick={() => handleQuizAnswer(qIdx, opt)}
+                              style={{ 
+                                textAlign: 'left',
+                                padding: '12px 16px',
+                                fontSize: '14px',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                border: '1px solid',
+                                backgroundColor: quizAnswers[qIdx] === opt ? 'var(--primary-glow)' : 'rgba(255,255,255,0.02)',
+                                borderColor: quizAnswers[qIdx] === opt ? 'var(--primary)' : 'var(--panel-border)',
+                                color: quizAnswers[qIdx] === opt ? 'white' : 'var(--text-secondary)',
+                                transition: 'all 0.15s'
+                              }}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    {quizScore === null ? (
+                      <button 
+                        className="btn btn-accent" 
+                        onClick={submitQuiz}
+                        disabled={Object.keys(quizAnswers).length < selectedCourse.quiz.length}
+                        style={{ width: '100%', padding: '16px', fontSize: '16px', marginTop: '10px' }}
+                      >
+                        Valider mes réponses
+                      </button>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '24px', borderRadius: 'var(--radius-md)', backgroundColor: 'rgba(6, 182, 212, 0.05)', border: '2px solid rgba(6, 182, 212, 0.3)' }}>
+                        <CheckCircle2 color="var(--accent-cyan)" size={48} />
+                        <span style={{ color: 'white', fontWeight: 'bold', fontSize: '20px' }}>Quiz Validé !</span>
+                        <span style={{ fontSize: '24px', color: 'var(--accent-cyan)', fontWeight: '900' }}>
+                          {quizScore} / {selectedCourse.quiz.length} Correct
+                        </span>
+                        <button onClick={() => setQuizScore(null)} className="btn btn-secondary" style={{ padding: '8px 16px', marginTop: '12px' }}>
+                          Recommencer
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="glass-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
@@ -963,6 +971,38 @@ export default function App() {
         )}
 
       </main>
+
+      {/* COURSE MODAL (PDF STYLE) */}
+      {isCourseModalOpen && selectedCourse && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '900px', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-color)' }}>
+            
+            {/* Modal Header */}
+            <div style={{ padding: '20px 32px', borderBottom: '1px solid var(--panel-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <BookOpen color="var(--primary)" size={24} />
+                <h2 style={{ fontSize: '20px', color: 'white', margin: 0 }}>Support de Cours : {selectedCourse.topic}</h2>
+              </div>
+              <button 
+                onClick={() => setIsCourseModalOpen(false)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px' }}
+              >
+                Fermer (X)
+              </button>
+            </div>
+            
+            {/* Modal Content */}
+            <div style={{ padding: '40px 60px', overflowY: 'auto', flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' }}>
+              <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+                {renderMarkdown(selectedCourse.course_content)}
+              </div>
+            </div>
+            
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
