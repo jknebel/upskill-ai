@@ -12,3 +12,4 @@ langchain-google-genai
 langgraph
 langchain-google-vertexai
 google-cloud-aiplatform
+google-cloud-texttospeech

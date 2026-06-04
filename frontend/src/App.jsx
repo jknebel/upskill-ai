@@ -35,6 +35,9 @@ export default function App() {
   const [pendingTopics, setPendingTopics] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
+  const [isQuizModalOpen, setIsQuizModalOpen] = useState(false);
+  const [currentQuizQuestions, setCurrentQuizQuestions] = useState([]);
+  const [hasBadge, setHasBadge] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizScore, setQuizScore] = useState(null);
   
@@ -397,6 +400,7 @@ export default function App() {
     setQuizScore(null);
     setQuizAnswers({});
     setIsCourseModalOpen(false);
+    setIsQuizModalOpen(false);
   };
 
   // Gérer la soumission du Quiz
@@ -404,15 +408,28 @@ export default function App() {
     setQuizAnswers(prev => ({ ...prev, [qIdx]: option }));
   };
 
-  const submitQuiz = () => {
+  const openQuizModal = () => {
     if (!selectedCourse || !selectedCourse.quiz) return;
+    // Shuffle the available questions and pick max 3
+    const shuffled = [...selectedCourse.quiz].sort(() => 0.5 - Math.random());
+    const picked = shuffled.slice(0, 3);
+    setCurrentQuizQuestions(picked);
+    setQuizAnswers({});
+    setQuizScore(null);
+    setIsQuizModalOpen(true);
+  };
+
+  const submitQuiz = () => {
     let score = 0;
-    selectedCourse.quiz.forEach((q, idx) => {
+    currentQuizQuestions.forEach((q, idx) => {
       if (quizAnswers[idx] === q.answer) {
         score++;
       }
     });
     setQuizScore(score);
+    if (score === currentQuizQuestions.length) {
+      setHasBadge(true);
+    }
   };
 
   // Convertir le Markdown du cours simple en blocs HTML
@@ -460,7 +477,14 @@ export default function App() {
             <Brain size={24} color="white" />
           </div>
           <div>
-            <h1 className="glow-text-primary" style={{ fontSize: '22px', fontWeight: '800' }}>UPSKILL AI</h1>
+            <h1 className="glow-text-primary" style={{ fontSize: '22px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              UPSKILL AI
+              {hasBadge && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', background: 'var(--accent-cyan)', color: 'black', padding: '4px 10px', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold', boxShadow: '0 0 10px rgba(6, 182, 212, 0.5)' }}>
+                  <Award size={16} style={{ marginRight: '4px' }} /> Certifié
+                </span>
+              )}
+            </h1>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Agentic Passive Learning POC</span>
           </div>
         </div>
@@ -804,62 +828,20 @@ export default function App() {
                   )}
                 </div>
 
-                {/* QUIZ (FULL WIDTH OF CONTAINER) */}
+                {/* QUIZ SECTION (BUTTON TO OPEN MODAL) */}
                 {selectedCourse.quiz && selectedCourse.quiz.length > 0 && (
-                  <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '40px' }}>
+                  <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', padding: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', marginBottom: '40px' }}>
                     <h4 style={{ fontSize: '18px', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Award color="var(--accent-cyan)" /> Test de validation des acquis
                     </h4>
-                    
-                    {selectedCourse.quiz.map((q, qIdx) => (
-                      <div key={qIdx} style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px', borderBottom: qIdx < selectedCourse.quiz.length - 1 ? '1px solid var(--panel-border)' : 'none' }}>
-                        <span style={{ fontSize: '15px', color: 'white', fontWeight: '500' }}>{qIdx + 1}. {q.question}</span>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {q.options.map((opt, optIdx) => (
-                            <button 
-                              key={optIdx}
-                              onClick={() => handleQuizAnswer(qIdx, opt)}
-                              style={{ 
-                                textAlign: 'left',
-                                padding: '12px 16px',
-                                fontSize: '14px',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                border: '1px solid',
-                                backgroundColor: quizAnswers[qIdx] === opt ? 'var(--primary-glow)' : 'rgba(255,255,255,0.02)',
-                                borderColor: quizAnswers[qIdx] === opt ? 'var(--primary)' : 'var(--panel-border)',
-                                color: quizAnswers[qIdx] === opt ? 'white' : 'var(--text-secondary)',
-                                transition: 'all 0.15s'
-                              }}
-                            >
-                              {opt}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-
-                    {quizScore === null ? (
-                      <button 
-                        className="btn btn-accent" 
-                        onClick={submitQuiz}
-                        disabled={Object.keys(quizAnswers).length < selectedCourse.quiz.length}
-                        style={{ width: '100%', padding: '16px', fontSize: '16px', marginTop: '10px' }}
-                      >
-                        Valider mes réponses
-                      </button>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '24px', borderRadius: 'var(--radius-md)', backgroundColor: 'rgba(6, 182, 212, 0.05)', border: '2px solid rgba(6, 182, 212, 0.3)' }}>
-                        <CheckCircle2 color="var(--accent-cyan)" size={48} />
-                        <span style={{ color: 'white', fontWeight: 'bold', fontSize: '20px' }}>Quiz Validé !</span>
-                        <span style={{ fontSize: '24px', color: 'var(--accent-cyan)', fontWeight: '900' }}>
-                          {quizScore} / {selectedCourse.quiz.length} Correct
-                        </span>
-                        <button onClick={() => setQuizScore(null)} className="btn btn-secondary" style={{ padding: '8px 16px', marginTop: '12px' }}>
-                          Recommencer
-                        </button>
-                      </div>
-                    )}
+                    <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Vérifiez vos connaissances sur ce sujet pour obtenir votre badge de certification.</p>
+                    <button 
+                      className="btn btn-accent"
+                      onClick={openQuizModal}
+                      style={{ padding: '12px 24px', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 0 20px rgba(6, 182, 212, 0.4)' }}
+                    >
+                      <CheckCircle2 size={20} /> Passer le Quiz
+                    </button>
                   </div>
                 )}
               </div>
@@ -999,6 +981,80 @@ export default function App() {
               </div>
             </div>
             
+          </div>
+        </div>
+      )}
+
+      {/* QUIZ MODAL */}
+      {isQuizModalOpen && currentQuizQuestions.length > 0 && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-color)', overflowY: 'auto', padding: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ fontSize: '24px', color: 'white', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Award color="var(--accent-cyan)" size={28} />
+                Quiz de certification
+              </h2>
+              <button onClick={() => setIsQuizModalOpen(false)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>Fermer (X)</button>
+            </div>
+
+            {currentQuizQuestions.map((q, qIdx) => (
+              <div key={qIdx} style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '20px', borderBottom: qIdx < currentQuizQuestions.length - 1 ? '1px solid var(--panel-border)' : 'none', marginBottom: '16px' }}>
+                <span style={{ fontSize: '16px', color: 'white', fontWeight: '500' }}>{qIdx + 1}. {q.question}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {q.options.map((opt, optIdx) => (
+                    <button 
+                      key={optIdx}
+                      onClick={() => handleQuizAnswer(qIdx, opt)}
+                      disabled={quizScore !== null}
+                      style={{ 
+                        textAlign: 'left',
+                        padding: '12px 16px',
+                        fontSize: '14px',
+                        borderRadius: '6px',
+                        cursor: quizScore !== null ? 'default' : 'pointer',
+                        border: '1px solid',
+                        backgroundColor: quizAnswers[qIdx] === opt ? 'var(--primary-glow)' : 'rgba(255,255,255,0.02)',
+                        borderColor: quizAnswers[qIdx] === opt ? 'var(--primary)' : 'var(--panel-border)',
+                        color: quizAnswers[qIdx] === opt ? 'white' : 'var(--text-secondary)',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {quizScore === null ? (
+              <button 
+                className="btn btn-accent" 
+                onClick={submitQuiz}
+                disabled={Object.keys(quizAnswers).length < currentQuizQuestions.length}
+                style={{ width: '100%', padding: '16px', fontSize: '18px', marginTop: '20px' }}
+              >
+                Valider mes réponses
+              </button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '32px', borderRadius: 'var(--radius-md)', backgroundColor: 'rgba(6, 182, 212, 0.05)', border: '2px solid rgba(6, 182, 212, 0.3)', marginTop: '20px' }}>
+                <CheckCircle2 color="var(--accent-cyan)" size={64} />
+                <span style={{ color: 'white', fontWeight: 'bold', fontSize: '24px' }}>Quiz Terminé !</span>
+                <span style={{ fontSize: '28px', color: 'var(--accent-cyan)', fontWeight: '900' }}>
+                  {quizScore} / {currentQuizQuestions.length} Correct
+                </span>
+                {quizScore === currentQuizQuestions.length && (
+                  <span style={{ color: 'var(--accent-cyan)', fontSize: '16px', fontWeight: 'bold', textAlign: 'center', marginTop: '8px' }}>Félicitations, vous avez obtenu votre badge certifié !</span>
+                )}
+                <div style={{ display: 'flex', gap: '16px', marginTop: '16px' }}>
+                  <button onClick={() => { setIsQuizModalOpen(false); setQuizScore(null); }} className="btn btn-primary" style={{ padding: '12px 24px' }}>
+                    Fermer
+                  </button>
+                  <button onClick={openQuizModal} className="btn btn-secondary" style={{ padding: '12px 24px' }}>
+                    Recommencer
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
