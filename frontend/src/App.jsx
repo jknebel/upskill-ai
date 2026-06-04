@@ -177,26 +177,25 @@ export default function App() {
     const scenario = demoScenarios.find(s => s.name === scenarioName);
     if (!scenario) return;
 
-    setIsSending(true);
-    
     // Pour chaque question du scénario
     for (let i = 0; i < scenario.prompts.length; i++) {
       const prompt = scenario.prompts[i];
-      setSpinnerText("Traitement du texte...");
       
-      // 1. Ajouter immédiatement le message utilisateur dans le chat local pour effet instantané
+      // 1. Ajouter immédiatement le message utilisateur dans le chat
       const localUserMsg = { 
         id: `temp-user-${Date.now()}-${i}`, 
         role: 'user', 
         content: prompt, 
         timestamp: new Date().toISOString() 
       };
-      
-      // Utiliser le callback fonctionnel pour s'assurer qu'on travaille avec le state à jour
       setChatHistory(prev => [...prev, localUserMsg]);
-      
+
+      // 2. Afficher le spinner de réflexion de l'IA
+      setIsSending(true);
+      setSpinnerText(`🧠 L'IA analyse la question ${i + 1}/${scenario.prompts.length}...`);
+
       try {
-        // 2. Envoyer la question individuelle à l'API de chat
+        // 3. Envoyer la question à l'API de chat
         const res = await fetch(`${API_URL}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -204,7 +203,9 @@ export default function App() {
         });
         const data = await res.json();
         
-        // 3. Ajouter immédiatement la réponse de l'assistant localement
+        // 4. Masquer le spinner et afficher la réponse
+        setIsSending(false);
+        
         const localAssistantMsg = {
           id: `temp-ast-${Date.now()}-${i}`,
           role: 'assistant',
@@ -213,17 +214,17 @@ export default function App() {
         };
         setChatHistory(prev => [...prev, localAssistantMsg]);
         
-        // Rafraîchir les tableaux de bord après chaque message traité
+        // Rafraîchir les tableaux de bord
         await fetchLearnerData();
         await fetchManagerData();
       } catch (err) {
         console.error(err);
+        setIsSending(false);
       }
       
-      // Pause de 1,5 seconde entre la réponse et la question suivante pour simuler une conversation
+      // 5. Pause entre la réponse et la prochaine question (simule la lecture)
       if (i < scenario.prompts.length - 1) {
-        setSpinnerText("Préparation de la question suivante...");
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 1200));
       }
     }
     
@@ -233,8 +234,9 @@ export default function App() {
     await fetchChatHistory();
 
     // === DÉCLENCHEMENT AUTOMATIQUE DU CRON ===
-    // Après toutes les questions, le cron clignote et génère automatiquement le contenu
-    setSpinnerText("⚡ Cron déclenché — Clustering & Génération en cours...");
+    // Après toutes les questions, le cron se déclenche et génère le contenu
+    setIsSending(true);
+    setSpinnerText("⚡ Cron déclenché — Clustering & Génération du cours en cours...");
     
     try {
       const analysisRes = await fetch(`${API_URL}/api/demo/trigger-analysis`, {
