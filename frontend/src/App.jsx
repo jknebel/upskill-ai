@@ -227,11 +227,38 @@ export default function App() {
       }
     }
     
-    setIsSending(false);
     setSpinnerText("L'IA analyse et réfléchit...");
     
     // Mettre à jour l'historique final pour s'assurer que les identifiants et le timing sont synchronisés
-    fetchChatHistory();
+    await fetchChatHistory();
+
+    // === DÉCLENCHEMENT AUTOMATIQUE DU CRON ===
+    // Après toutes les questions, le cron clignote et génère automatiquement le contenu
+    setSpinnerText("⚡ Cron déclenché — Clustering & Génération en cours...");
+    
+    try {
+      const analysisRes = await fetch(`${API_URL}/api/demo/trigger-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: USER_ID })
+      });
+      const analysisData = await analysisRes.json();
+      
+      await fetchLearnerData();
+      await fetchManagerData();
+      
+      if (analysisData.generated_courses && analysisData.generated_courses.length > 0) {
+        setSelectedCourse(analysisData.generated_courses[0]);
+        setActiveTab('learner');
+        setQuizScore(null);
+        setQuizAnswers({});
+      }
+    } catch (err) {
+      console.error("Erreur lors de l'analyse automatique :", err);
+    }
+
+    setIsSending(false);
+    setSpinnerText("L'IA analyse et réfléchit...");
   };
 
   // Lancer l'analyse Cron (Clustering + Génération)
