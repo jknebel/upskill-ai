@@ -13,7 +13,7 @@ VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "us-central1")
 USE_VERTEX_AI = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
 
 # --- Modèles dédiés par agent ---
-MODEL_CHATBOT = os.getenv("MODEL_CHATBOT", "gemini-2.0-flash-lite")       # Chatbot conversationnel (rapide, pas de thinking)
+MODEL_CHATBOT = os.getenv("MODEL_CHATBOT", "gemini-2.5-flash")         # Chatbot conversationnel (rapide, thinking désactivé)
 MODEL_EXTRACTOR = os.getenv("MODEL_EXTRACTOR", "gemini-2.5-flash")        # Extracteur de lacunes (thinking activé)
 MODEL_TEACHER = os.getenv("MODEL_TEACHER", "gemini-2.5-flash")            # Prof A & Prof B (thinking activé)
 MODEL_DIRECTOR = os.getenv("MODEL_DIRECTOR", "gemini-2.5-pro")            # Directeur vérificateur (thinking activé)
