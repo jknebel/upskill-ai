@@ -235,8 +235,11 @@ def load_demo_scenario(request: LoadDemoRequest):
     for prompt in demo_prompts:
         # Enregistrer le message de chat
         storage.save_chat_message(user_id, "user", prompt)
-        # Extraire la lacune
-        gaps = extractor.extract_gaps(prompt)
+        
+        # Pour garantir que les scénarios de DÉMO fonctionnent à 100% (clustering parfait), 
+        # on force l'utilisation de l'extracteur simulé pour avoir le même topic/embedding
+        gaps = extractor._simulate_extraction(prompt)
+        
         for gap in gaps:
             gap_doc = storage.save_gap(user_id, gap)
             inserted_gaps.append(gap_doc)
